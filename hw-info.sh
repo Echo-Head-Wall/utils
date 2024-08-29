@@ -5,48 +5,71 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to run a command safely and capture its output
+# Function to run a command safely
 run_command() {
     if command_exists "$1"; then
-        echo "$($2)"
+        eval "$2"
     else
-        echo "N/A"
+        echo "Warning: $1 is not available on this system."
     fi
 }
 
-# Start TOML output
-echo "[system]"
-echo "hostname = \"$(hostname)\""
-echo "os = \"$(run_command "cat" "cat /etc/os-release | grep '^NAME=' | cut -d'\"' -f2")\""
-echo "os_version = \"$(run_command "cat" "cat /etc/os-release | grep '^VERSION_ID=' | cut -d'\"' -f2")\""
-echo "kernel = \"$(uname -r)\""
+echo "System Information:"
+echo "=================="
 
-echo -e "\n[cpu]"
-echo "model = \"$(run_command "lscpu" "lscpu | grep 'Model name' | cut -d':' -f2 | xargs")\""
-echo "cores = $(run_command "lscpu" "lscpu | grep '^CPU(s):' | awk '{print $2}'")"
-echo "threads = $(run_command "lscpu" "lscpu | grep '^Thread(s) per core:' | awk '{print $4}'")"
+# Hostname
+echo "Hostname: $(hostname)"
 
-echo -e "\n[memory]"
-total_mem=$(run_command "free" "free -b | awk '/^Mem:/{print $2}'")
-echo "total_bytes = $total_mem"
-echo "total_gb = $(awk "BEGIN {printf \"%.2f\", $total_mem/1024/1024/1024}")"
+# OS Information
+echo -e "\nOS Information:"
+run_command "cat" "cat /etc/os-release | grep -E '^(NAME|VERSION)='"
 
-echo -e "\n[disk]"
-echo "partitions = ["
-run_command "df" "df -h --output=source,size,used,avail,pcent,target -x tmpfs -x devtmpfs" | tail -n +2 | while read line; do
-    source=$(echo $line | awk '{print $1}')
-    size=$(echo $line | awk '{print $2}')
-    used=$(echo $line | awk '{print $3}')
-    avail=$(echo $line | awk '{print $4}')
-    pcent=$(echo $line | awk '{print $5}')
-    target=$(echo $line | awk '{print $6}')
-    echo "  { source = \"$source\", size = \"$size\", used = \"$used\", available = \"$avail\", used_percent = \"$pcent\", mount_point = \"$target\" },"
-done
-echo "]"
+# Kernel Version
+echo -e "\nKernel Version:"
+uname -r
 
-echo -e "\n[network]"
-echo "interfaces = ["
-run_command "ip" "ip -o addr show | grep 'inet ' | awk '{print \$2, \$4}'" | while read -r interface ip; do
-    echo "  { name = \"$interface\", ip = \"${ip%/*}\" },"
-done
-echo "]"
+# CPU Information
+echo -e "\nCPU Information:"
+run_command "lscpu" "lscpu | grep -E 'Model name|Socket|Core|Thread|CPU MHz'"
+
+# Memory Information
+echo -e "\nMemory Information:"
+run_command "free" "free -h"
+
+# Disk Information
+echo -e "\nDisk Information:"
+run_command "df" "df -h"
+
+# Network Information
+echo -e "\nNetwork Information:"
+run_command "ip" "ip addr | grep -E 'inet |ether'"
+
+# System Manufacturer and Model (requires root privileges)
+echo -e "\nSystem Manufacturer and Model:"
+if [ "$(id -u)" -eq 0 ]; then
+    run_command "dmidecode" "dmidecode -t system | grep -E 'Manufacturer|Product Name'"
+else
+    echo "Root privileges required to display system manufacturer and model."
+fi
+
+# BIOS Information (requires root privileges)
+echo -e "\nBIOS Information:"
+if [ "$(id -u)" -eq 0 ]; then
+    run_command "dmidecode" "dmidecode -t bios | grep -E 'Vendor|Version|Release Date'"
+else
+    echo "Root privileges required to display BIOS information."
+fi
+
+# GPU Information
+echo -e "\nGPU Information:"
+run_command "lspci" "lspci | grep -i vga"
+
+# USB Devices
+echo -e "\nUSB Devices:"
+run_command "lsusb" "lsusb"
+
+# NUMA Information
+echo -e "\nNUMA Information:"
+run_command "lscpu" "lscpu | grep -i numa"
+
+echo -e "\nNote: This script displays system information. Be cautious about sharing this output as it may contain sensitive data."
